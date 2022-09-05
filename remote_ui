@@ -1,0 +1,370 @@
+# -*- coding:utf-8 -*-
+import time
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.select import Select
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.common.exceptions import TimeoutException
+from selenium.common.exceptions import NoSuchElementException
+
+
+class RemoteUI(object):
+    """
+        This class is mainly used to start the corresponding driver service according to different drivers and open a 
+    driver process.
+        Define a page base class that encapsulates some common driver operations and element positioning methods.
+    """
+    def __init__(self, remote_server="http://xxx.xxx.xxx.xxx:19091"):
+        """
+        Initialize the driver
+
+        :Args:
+         - driver: Specific driver driver
+        """
+        options = webdriver.ChromeOptions()
+        prefs = {}
+        prefs["credentials_enable_service"] = False
+        prefs["profile.password_manager_enabled"] = False
+        options.add_experimental_option("prefs", prefs)                             # Turn off the password popup
+        options.add_argument('ignore-certificate-errors')                           # Ignore certificate errors
+        options.add_experimental_option("excludeSwitches", ['enable-automation'])   # Does not appear to be being controlled by automation software
+        options.set_capability('pageLoadStrategy', 'eager')
+
+        self.driver = webdriver.Remote(remote_server, desired_capabilities=options.to_capabilities())
+        self.driver.maximize_window()
+
+    def open(self, url):
+        """
+        Open the specified url
+        :Args: 
+         - url: URL visited
+        """
+        self.driver.get(url)
+
+    def quit(self):
+        """
+        Exit the driver process.
+        """
+        self.driver.quit()
+
+    def forward(self):
+        """
+        driver forward operation.
+        """
+        self.driver.forward()
+
+    def back(self):
+        """
+        driver back operation.
+        """
+        self.driver.back()
+
+    def refresh(self):
+        """
+        driver refresh operation.
+        """
+        self.driver.refresh()
+
+    def close(self):
+        """
+        Close the current window of the driver.
+        """
+        try:
+            self.driver.close()
+        except NameError as e:
+            print("Failed to quit the driver with {}".format(e))
+
+    def wait(self, seconds):
+        """
+        Set implicit wait time.
+
+        :Args:
+          - seconds: digital
+        """
+        self.driver.implicitly_wait(seconds)
+
+    def wait_title(self, content, timeout=60):
+        """
+        Set show wait, Waiting for title to contain
+
+        :Args:
+         - content: Content contained in the title
+        :Returns:
+         - wait_result: Return waiting result，True or False
+        """
+        try:
+            WebDriverWait(self.driver, timeout).until(EC.title_contains(content))
+            return True
+        except TimeoutException:
+            return False
+
+    def wait_element(self, selector, timeout=60):
+        """
+         Determine if the element appears in the dom tree
+        :Args:
+         - selector: find the element
+
+        :Returns: True or False
+        """
+        selector_by = selector.split('=>')[0]
+        selector_value = selector.split('=>')[1]
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            if format(selector_by).lower() == 'id':
+                wait.until(EC.presence_of_element_located((By.ID, selector_value)))
+            elif format(selector_by).lower() == 'xpath':
+                wait.until(EC.presence_of_element_located((By.XPATH, selector_value)))
+            elif format(selector_by).lower() == 'css':
+                wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector_value)))
+            elif format(selector_by).lower() == 'link_text':
+                wait.until(EC.presence_of_element_located((By.LINK_TEXT, selector_value)))
+            elif format(selector_by).lower() == 'name':
+                wait.until(EC.presence_of_element_located((By.NAME, selector_value)))
+            else:
+                raise NameError("Please enter a valid type of targeting elements.")
+            return True
+        except TimeoutException:
+            return False
+
+    def wait_window(self, then, timeout=2):
+        """
+        Get the current window handle.
+
+        :Args:
+         - then: Last window handle
+         - timeout: waiting time
+
+        :Returns:
+            set(wh_now).difference(set(wh_then)).pop()
+        """
+        time.sleep(round(timeout / 1000))
+
+        # Get all current window handles
+        wh_now = self.driver.window_handles
+        wh_then = then
+
+        if len(wh_now) > len(wh_then):
+            return set(wh_now).difference(set(wh_then)).pop()
+
+    def wait_clickable(self, selector, timeout=60):
+        """
+         Determine if the element appears in the dom tree
+        :Args:
+         - selector:  find the element
+
+        :return:
+        """
+        selector_by = selector.split('=>')[0]
+        selector_value = selector.split('=>')[1]
+        wait = WebDriverWait(self.driver, timeout)
+        try:
+            if format(selector_by).lower() == 'id':
+                wait.until(EC.element_to_be_clickable((By.ID, selector_value)))
+            elif format(selector_by).lower() == 'xpath':
+                wait.until(EC.element_to_be_clickable((By.XPATH, selector_value)))
+            elif format(selector_by).lower() == 'css':
+                wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector_value)))
+            elif format(selector_by).lower() == 'link_text':
+                wait.until(EC.element_to_be_clickable((By.LINK_TEXT, selector_value)))
+            elif format(selector_by).lower() == 'name':
+                wait.until(EC.element_to_be_clickable((By.NAME, selector_value)))
+            else:
+                raise NameError("Please enter a valid type of targeting elements.")
+            return True
+        except TimeoutException:
+            return False
+
+    def find_element(self, selector):
+        """
+        Positioning element method:
+          Why is this place cutting strings according to =>, please see how to locate elements in the page.
+              Submit_btn = "id=>su"
+              Login_lnk = "xpath => //*[@id='u1']/a[7]"  # baidu Home Login Link Location.
+          If the equal sign is used, many xpath expressions contain a =, which will cause inaccurate cutting
+          and affect element positioning.
+
+        :Args:
+         - selector: Selected element
+        """
+        element = ''
+        if '=>' not in selector:
+            return self.driver.find_element_by_id(selector)
+        selector_by = selector.split('=>')[0]
+        selector_value = selector.split('=>')[1]
+        if selector_by == 'id':
+            try:
+                element = self.driver.find_element_by_id(selector_value)
+                print("Had find the element \' {} \' successful " "by {} via value: {} ".format(element.text, selector_by,selector_value))
+            except NoSuchElementException as e:
+                print("NoSuchElementException: {}".format(e))
+                return False
+        elif selector_by == 'name':
+            element = self.driver.find_element_by_name(selector_value)
+        elif selector_by == 'class_name':
+            element = self.driver.find_element_by_class_name(selector_value)
+        elif selector_by == 'link_text':
+            element = self.driver.find_element_by_link_text(selector_value)
+        elif selector_by == 'partial_link_text':
+            element = self.driver.find_element_by_partial_link_text(selector_value)
+        elif selector_by == 'tag_name':
+            element = self.driver.find_element_by_tag_name(selector_value)
+        elif selector_by == 'xpath':
+            try:
+                element = self.driver.find_element_by_xpath(selector_value)
+                print("Had find the element \' {} \' successful " "by {} via value: {} ".format(element.text, selector_by,selector_value))
+            except NoSuchElementException as e:
+                print("NoSuchElementException: {}".format(e))
+
+        elif selector_by == 'css':
+            element = self.driver.find_element_by_css_selector(selector_value)
+        else:
+            raise NameError("Please enter a valid type of targeting elements.")
+
+        return element
+
+    def type(self, selector, text):
+        """
+        This is an input operation.
+
+        :Args:
+         - selector: Selected element
+         - text: What you need to enter
+        """
+        el = self.find_element(selector)
+        try:
+            el.send_keys(Keys.CONTROL, 'a')
+            el.send_keys(text)
+            print("Had type \' {} \' in inputBox".format(text))
+        except NameError as e:
+            print("Failed to type in input box with {}".format(e))
+
+    def clear(self, selector):
+        """
+        Clear text box.
+        :Args:
+         - selector: Selected element
+        """
+        el = self.find_element(selector)
+        try:
+            el.clear()
+            print("Clear text in input box before typing.")
+        except NameError as e:
+            print("Failed to clear in input box with {}".format(e))
+
+    def select(self, selector, value):
+        """
+        Select the value of the drop-down option.
+        :Args:
+         - selector: Selected element
+         - value: The value of the option
+        """
+        el = self.find_element(selector)
+        try:
+            Select(el).select_by_value(value)
+            print("The selected value is {}".format(value))
+        except NameError as e:
+            print("Failed to select value {}".format(e))
+
+    def click(self, selector):
+        """
+        Click on page element. Eg: button, link.
+
+        :Args:
+         - selector: Selected element
+        """
+        el = self.find_element(selector)
+        try:
+            el_value = el.text
+            el.click()
+            print("The element \' {} \' was clicked.".format(el_value))
+        except NameError as e:
+            print("Failed to click the element with {}".format(e))
+
+    def get_title(self):
+        """
+        Get the page title.
+        """
+        print("Current page title is {}".format(self.driver.title))
+        return self.driver.title
+
+    def get_text(self, selector):
+        """
+        Get the element text content.
+        :Args:
+         - selector: Selected element
+        """
+        el = self.find_element(selector)
+        content = ""
+        try:
+            content = el.text
+            print("Element text content is: {}".format(content))
+        except NameError as e:
+            print("Failed to get element text content {}".format(e))
+
+        return content
+
+    @staticmethod
+    def sleep(seconds):
+        """
+        The function defers the running of the calling thread,
+        and the parameter secs refers to the number of seconds,
+        indicating the time the process hangs.
+
+        :Args:
+             - seconds(s): digital
+        """
+        time.sleep(seconds)
+
+    def exist(self, selector):
+        """
+         Determine if the specified element exists on the current page
+
+        :Args:
+          - selector: Selected element
+        """
+        flag = True
+        el = self.find_element(selector)
+        try:
+            assert el
+        except Exception as e:
+            print("This element does not exist {}".format(e))
+            flag = False
+        return flag
+
+    def switch(self, type, handles=None):
+        """
+        Switch to frame or default_content or windows
+        :Args:
+          - type: toggle type
+          - handles: window handle
+        """
+        if type == "frame":
+            self.driver.switch_to.frame(0)
+        elif type == "default":
+            self.driver.switch_to.default_content()
+        elif type == 'window':
+            self.driver.switch_to.window(handles)
+        else:
+            raise NameError("Please enter a valid type")
+
+    def script(self, command):
+        """
+        execute script function
+        :Args:
+          - command: script command
+        :return: 
+        """
+        try:
+            self.driver.execute_script(command)
+        except NameError as e:
+            print("Failed to execute script {}".format(e))
+
+    def add_cookie(self, **cookies):
+        """
+        add cookies
+        :Args:
+         - cookies: cookies
+        """
+        self.driver.add_cookie(cookies)
